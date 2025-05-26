@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Config\EbayApiEndpoints;
 use App\Entity\InventoryItem;
 use App\Repository\InventoryItemRepository;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
@@ -15,182 +16,266 @@ class EbayInventoryItemService
     private $tokenService;
     private $inventoryItemRepository; 
     private string $Environment;
+    private string $baseUrl;
+    private EbayApiRateLimiter $rateLimiter;
 
-    public function __construct(Client $client, TokenService $tokenService, LoggerInterface $logger, InventoryItemRepository $inventoryItemRepository, ParameterBagInterface $params)
+    public function __construct(
+        Client $client = null,
+        TokenService $tokenService,
+        LoggerInterface $logger,
+        InventoryItemRepository $inventoryItemRepository,
+        ParameterBagInterface $params,
+        EbayApiRateLimiter $rateLimiter,
+    )
     {
-        $this->client = $client;
+        $this->client = $client ?? new Client();
         $this->tokenService = $tokenService;
         $this->logger = $logger;
         $this->inventoryItemRepository = $inventoryItemRepository;
-        $this->Environment = $params->get('ebay_environment');
-    }
-
-    private function getApiUrl(string $endpoint): string // метод для получания сылки в каой среде работать
-    {
-        $baseUrl = match ($this->Environment) {
-            'Production' => 'https://api.ebay.com',
-            'Sandbox' => 'https://api.sandbox.ebay.com',
-            default => throw new \InvalidArgumentException('Invalid environment specified.'),
-        };
-
-        return $baseUrl . $endpoint;
+        $this->rateLimiter = $rateLimiter;
+        $environment = $params->get('ebay_environment');
+        $this->baseUrl = EbayApiEndpoints::getBaseApiUrl($environment);
     }
     
-    public function addItemFromDatabaseItem(string $sku): ?array   // Метод для добавления товара на eBay на основе данных из базы по SKU
+    /**
+     * Добавление товара на eBay на основе записи из базы данных.
+     *
+     * @param string $sku SKU товара для добавления.
+     * @return array|null Массив с данными добавленного товара или null в случае ошибки.
+     */
+    public function addItemFromDatabaseItem(string $sku): ?array
     {
         try {
-            $item = $this->inventoryItemRepository->findBySku($sku);  // Получаем товар из базы данных по SKU
-
-            if (!$item) { // Если товар не найден в базе, логируем предупреждение и возвращаем null
-                $this->logger->warning('Item not found in database with SKU: ' . $sku);
+            $item = $this->inventoryItemRepository->findBySku($sku);
+            
+            if (!$item) {
+                $this->logger->warning("Item not found in database with SKU: {$sku}");
                 return null;
             }
-            
-            $itemData = [  // Формируем данные товара, которые будут отправлены в API eBay
-                'sku' => $item->getSku(),
-                'locale' => $item->getLocale(),
-                'product' => [
-                    'title' => $item->getTitle(),
-                    'brand' => $item->getBrand(),
-                    'mpn' => $item->getMPN(),
-                    'aspects' => [
-                        'Size' => [$item->getSize()],
-                        'Color' => [$item->getColor()],
-                        'Material' => [$item->getMaterial()]
-                    ],
-                    'description' => $item->getDescription(),
-                    'imageUrls' => $item->getImageUrls(),
-                ],
-                'condition' => $item->getItemCondition(),
-            ];
 
-            // $this->logger->info('Preparing to add item to eBay: ' . json_encode($itemData)); // Логируем подготовленные данные, это можно добавить для отладки
+            // Получаем Token из метода
+            $accessToken = $this->getAccessToken();
 
-            $accessToken = $this->tokenService->getValidAccessToken(); // Получаем токен доступа для eBay
-            if ($accessToken) {
-                $this->logger->info('Access token successfully retrieved for SKU: ' . $item->getSku());
-            } else {
-                $this->logger->warning('No access token retrieved for SKU: ' . $item->getSku());
+            // проверка лимита запросов
+            if (!$this->rateLimiter->incrementAndCheck()) {
+                $this->logger->warning("eBay API call not executed: daily limit has been exceeded.");
+                return null;
             }
 
-            $url = $this->getApiUrl('/sell/inventory/v1/inventory_item/' . $sku); // Формируем правильный URL для API запроса
+            // проверка лимита запросов
+            if (!$this->rateLimiter->incrementAndCheck()) {
+                return null; 
+            }
 
-            //  $this->logger->info('URL: ' . $url); //вывод url так же для отладки 
+            // Формируем URL для создания товара на eBay
+            $url = $this->baseUrl . "/sell/inventory/v1/inventory_item/{$sku}";
+            // Формируем body для создания товара на eBay
+            $itemData = $this->buildItemData($item);
 
-            $response = $this->client->put($url, [ // Отправляем PUT запрос для добавления товара
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $accessToken,
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                    'Content-Language' => 'en-US',
-                ],
+            // Отправляем POST запрос для создания добавления товара в инфентарь
+            $response = $this->client->put($url, [
+                'headers' => $this->buildJsonHeaders($accessToken),
                 'json' => $itemData,
             ]);
 
-           
-            $responseBody = $response->getBody()->getContents(); // Получаем содержимое ответа от eBay
-            $this->logger->info('Response from eBay: ' . $responseBody);  // Логируем ответ от eBay тоже для отладки
+            $status = $response->getStatusCode();
+            $responseBody = $response->getBody()->getContents();
+            $this->logger->info("Response from eBay: {$responseBody}");
 
-           
-            if ($response->getStatusCode() === 204 || $response->getStatusCode() === 200) { // Проверяем код ответа и возвращаем данные, если всё в порядке
-                return $itemData;  
-            }
-
-            $responseData = json_decode($responseBody, true); // Если ответ содержит ошибки, декодируем и возвращаем их
-            return $responseData ? $responseData : null; // Если ответ содержит данные, обрабатываем их
-
-        } catch (\Exception $e) {
-            $this->logger->error('Error adding item to eBay inventory - ' . $e->getMessage());
+            return in_array($status, [200, 204]) ? $itemData : json_decode($responseBody, true) ?? null;
+        } catch (\Throwable $e) {
+            $this->logger->error("Error adding item to eBay: " . $e->getMessage());
             return null;
         }
     }
 
-    public function getAllItems(int $limit = 10, int $offset = 0): ?array // Метод для получения всех товаров с eBay
+    /**
+     * Получение списка всех товаров из eBay.
+     *
+     * @param int $limit Максимальное количество возвращаемых товаров за один запрос.
+     * @param int $offset Смещение для пагинации результатов.
+     * @return array|null Массив с информацией о товарах или null в случае ошибки.
+     */
+    public function getAllItems(int $limit = 10, int $offset = 0): ?array
     {
         try {
-            $accessToken = $this->tokenService->getValidAccessToken(); // Получаем токен доступа для eBay
-            if ($accessToken) {
-                $this->logger->info('Access token successfully retrieved');
-            } else {
-                $this->logger->warning('No access token retrieved');
-            }
-            
-            $url = $this->getApiUrl('/sell/inventory/v1/inventory_item?limit=' . $limit . '&offset=' . $offset); // Формируем URL для запроса списка товаров с eBay с учетом лимита и смещения
+            // Получаем Token из метода
+            $accessToken = $this->getAccessToken();
 
-            $response = $this->client->get($url, [ // Отправляем GET запрос для получения списка товаров
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $accessToken,
-                    'Accept' => 'application/json',
-                ],
+            // проверка лимита запросов
+            if (!$this->rateLimiter->incrementAndCheck()) {
+                $this->logger->warning("eBay API call not executed: daily limit has been exceeded.");
+                return null;
+            }
+
+            // проверка лимита запросов
+            if (!$this->rateLimiter->incrementAndCheck()) {
+                return null;
+            }
+
+            // Формируем URL для запроса предметов
+            $url = $this->baseUrl . "/sell/inventory/v1/inventory_item?limit={$limit}&offset={$offset}";
+
+            // Отправляем GET запрос для получения товаров
+            $response = $this->client->get($url, [
+                'headers' => $this->buildAuthHeaders($accessToken),
             ]);
 
-            $responseBody = $response->getBody()->getContents();  // Получаем содержимое ответа от eBay
-            //$this->logger->info('Fetched inventory list: ' . $responseBody); // Логируем ответ от eBay тоже для отладки
-
-            return json_decode($responseBody, true); // Декодируем и возвращаем данные из ответа
-        } catch (\Exception $e) {
-            $this->logger->error('Error fetching inventory list - ' . $e->getMessage());
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (\Throwable $e) {
+            $this->logger->error("Error fetching inventory list: " . $e->getMessage());
             return null;
         }
     }
 
-    public function getItemBySku(string $sku): ?array // Метод для получения товара по SKU с eBay
+    /**
+     * Получение информации о товаре по его SKU.
+     *
+     * @param string $sku SKU товара.
+     * @return array|null Массив с информацией о товаре или null в случае ошибки.
+     */
+    public function getItemBySku(string $sku): ?array
     {
         try {
-            $accessToken = $this->tokenService->getValidAccessToken();   // Получаем токен доступа для eBay
-            if ($accessToken) {
-                $this->logger->info('Access token successfully retrieved');
-            } else {
-                $this->logger->warning('No access token retrieved');
-            }
+            // Получаем Token из метода
+            $accessToken = $this->getAccessToken();
 
-            $url = $this->getApiUrl('/sell/inventory/v1/inventory_item/' . $sku); // Формируем URL для запроса товара по SKU
-
-            $response = $this->client->get($url, [  // Отправляем GET запрос для получения товара по SKU
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $accessToken,
-                    'Accept' => 'application/json',
-                ],
-            ]);
-
-            $responseBody = $response->getBody()->getContents(); // Получаем содержимое ответа от eBay
-            // $this->logger->info('Fetched item with SKU ' . $sku . ': ' . $responseBody);// Логируем ответ от eBay тоже для отладки
-
-            return json_decode($responseBody, true); // Декодируем и возвращаем данные из ответа
-        } catch (\Exception $e) {
-            $this->logger->error('Error fetching item by SKU - ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    public function deleteItemBySku(string $sku): bool // Метод для удаления товара по SKU с eBay
-    {
-        try {
-            $accessToken = $this->tokenService->getValidAccessToken(); // Получаем токен доступа для eBay
+            // Если Token не найден, логируем предупреждение и возвращаем null
             if (!$accessToken) {
-                $this->logger->warning("Access token not found for SKU: $sku");
-                return false;
+                $this->logger->warning("No access token retrieved");
+                return null;
             }
 
-            $url = $this->getApiUrl('/sell/inventory/v1/inventory_item/' . $sku); // Формируем URL для запроса удаления товара по SKU
+            // проверка лимита запросов
+            if (!$this->rateLimiter->incrementAndCheck()) {
+                $this->logger->warning("eBay API call not executed: daily limit has been exceeded.");
+                return null;
+            }
 
-            $response = $this->client->delete($url, [ // Отправляем DELETE запрос для удаления товара
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $accessToken,
-                    'Accept' => 'application/json',
-                ],
+            // Формируем URL для запроса предмета по SKU
+            $url = $this->baseUrl . "/sell/inventory/v1/inventory_item/{$sku}";
+
+             // Отправляем GET запрос для получения предмета по SKU
+            $response = $this->client->get($url, [
+                'headers' => $this->buildAuthHeaders($accessToken),
             ]);
 
-            if ($response->getStatusCode() === 204) { // Проверяем код ответа и возвращаем true, если удаление прошло успешно
-                return true;
-            } else { // Логируем ошибку, если удаление не удалось
-                $this->logger->error("Failed to delete item with SKU $sku. Status: " . $response->getStatusCode());
-                return false;
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (\Throwable $e) {
+            $this->logger->error("Error fetching item by SKU: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Удаление товара с eBay по его SKU.
+     *
+     * @param string $sku SKU товара для удаления.
+     * @return bool True в случае успешного удаления, false в случае ошибки.
+     */
+    public function deleteItemBySku(string $sku): bool
+    {
+        try {
+            // Получаем Token из метода
+            $accessToken = $this->getAccessToken();
+
+            // Если Token не найден, логируем предупреждение и возвращаем null
+            if (!$accessToken) {
+                $this->logger->warning("No access token retrieved");
+                return null;
             }
-        } catch (\Exception $e) {
-            $this->logger->error("Error deleting item from eBay inventory: " . $e->getMessage());
+
+            // проверка лимита запросов
+            if (!$this->rateLimiter->incrementAndCheck()) {
+                $this->logger->warning("eBay API call not executed: daily limit has been exceeded.");
+                return null;
+            }
+
+            // Формируем URL для удаления предмета по SKU
+            $url = $this->baseUrl  . "/sell/inventory/v1/inventory_item/{$sku}";
+
+            // Отправляем DELET запрос для удаления предмета по SKU
+            $response = $this->client->delete($url, [
+                'headers' => $this->buildAuthHeaders($accessToken),
+            ]);
+
+            return $response->getStatusCode() === 204;
+        } catch (\Throwable $e) {
+            $this->logger->error("Error deleting item from eBay: " . $e->getMessage());
             return false;
         }
     }
 
+    /**
+     * Получает действительный Access Token.
+     *
+     * @return string|null Access Token или null, если получить не удалось.
+     */
+    private function getAccessToken(): ?string
+    {
+        $accessToken = $this->tokenService->getValidAccessToken();
+
+        if (!$accessToken) {
+            $this->logger->warning("No access token retrieved");
+        }
+
+        return $accessToken;
+    }
+
+    /**
+     * Метод для для создания Auth Header
+     * 
+     * @param string $accessToken Действительный Access Token.
+     * @return array Массив с заголовком 'Authorization'.
+     */
+    private function buildAuthHeaders(string $accessToken): array
+    {
+        return [
+            'Authorization' => "Bearer {$accessToken}",
+            'Accept' => 'application/json',
+        ];
+    }
+
+    /**
+     * Метод для для создания Build Header
+     * 
+     * @param string $accessToken Действительный Access Token.
+     * @return array Массив с заголовками 'Authorization', 'Accept' и 'Content-Type'.
+     */
+    private function buildJsonHeaders(string $accessToken): array
+    {
+        return[
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
+            'Content-Language' => 'en-US',
+        ];
+    }
+
+    /**
+     * Формирование массива itemData из сущности
+     *
+     * @param InventoryItem $item Сущность товара из базы данных.
+     * @return array Массив с данными товара в формате, ожидаемом API eBay.
+     */
+    private function buildItemData(InventoryItem $item): array
+    {
+        return [
+            'sku' => $item->getSku(),
+            'locale' => $item->getLocale(),
+            'product' => [
+                'title' => $item->getTitle(),
+                'brand' => $item->getBrand(),
+                'mpn' => $item->getMPN(),
+                'aspects' => [
+                    'Size' => [$item->getSize()],
+                    'Color' => [$item->getColor()],
+                    'Material' => [$item->getMaterial()],
+                ],
+                'description' => $item->getDescription(),
+                'imageUrls' => $item->getImageUrls(),
+            ],
+            'condition' => $item->getItemCondition(),
+        ];
+    }
 }

@@ -13,40 +13,65 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
 
 class EbayAuthController extends AbstractController
 {
-
-    #[Route('/ebay/auth', name: 'ebay_auth')] //создаю маршрут (Так же через этот путь можно обновить токен, а точнее просто запишется новый)
+    /**
+     * создаю маршрут (Так же через этот путь можно обновить токен, а точнее просто запишется новый)
+     */
+    #[Route('/ebay/auth', name: 'ebay_auth')] 
     public function auth(EbayAuthService $ebayAuthService): RedirectResponse
     {
-        $authorizationUrl = $ebayAuthService->getAuthorizationUrl(); // Вызывает getAuthorizationUrl() из EbayAuthService для получения ссылки на вход.
-        return new RedirectResponse($authorizationUrl); //перенаправляем пользователя 
+        // Вызывает getAuthorizationUrl() из EbayAuthService для получения ссылки на вход.
+        $authorizationUrl = $ebayAuthService->getAuthorizationUrl();
+
+        //перенаправляем пользователя 
+        return new RedirectResponse($authorizationUrl);
     }
 
-    #[Route('/ebay/callback', name: 'ebay_callback')] //создаю маршрут 
+    /**
+     * создаю маршрут
+     */
+    #[Route('/ebay/callback', name: 'ebay_callback')]
     public function callback(Request $request, EbayAuthService $ebayAuthService, TokenService $tokenService): JsonResponse
     {
-        $code = $request->query->get('code'); //получаю code из запроса (GET параметр).
+        //получаю code из запроса (GET параметр).
+        $code = $request->query->get('code');
 
-        if (!$code) { // проверка если code нет – возвращает ошибку 400 Bad Request.
+        // проверка если code нет – возвращает ошибку 400 Bad Request.
+        if (!$code) { 
             return new JsonResponse(['error' => 'Code not provided'], 400);
         }
 
-        $tokens = $ebayAuthService->getAccessToken($code); // Вызывает getAccessToken() из EbayAuthService для получения токена.
-        $tokenService->saveTokens($tokens); //сохраняем токен в базу данных 
-        return new JsonResponse($tokens); //перенаправляем пользователя 
+        // Вызывает getAccessToken() из EbayAuthService для получения токена.
+        $tokens = $ebayAuthService->getAccessToken($code);
+
+        //сохраняем токен в базу данных 
+        $tokenService->saveTokens($tokens); 
+
+        //перенаправляем пользователя 
+        return new JsonResponse($tokens); 
     }
 
-    #[Route('/ebay/refresh', name: 'ebay_refresh')] //создаю маршрут 
+    /**
+     * создаю маршрут
+     */
+    #[Route('/ebay/refresh', name: 'ebay_refresh')]
     public function refresh(Request $request, EbayAuthService $ebayAuthService, TokenService $tokenService): JsonResponse
     {
-        $refreshToken = $request->query->get('refresh_token');// Получаю refresh_token из запроса (GET параметр).
+        // Получаю refresh_token из запроса (GET параметр).
+        $refreshToken = $request->query->get('refresh_token');
 
-        if (!$refreshToken) { //Если токена нет – возвращает ошибку 400 Bad Request
+        //Если токена нет – возвращает ошибку 400 Bad Request
+        if (!$refreshToken) { 
             return new JsonResponse(['error' => 'Refresh token not provided'], 400);
         }
 
-        $tokens = $ebayAuthService->refreshAccessToken($refreshToken);// Запрашиваем новый access_token у eBay через refreshAccessToken($refreshToken)
-        $tokenService->updateTokens($refreshToken, $tokens); // Обновляем сохранённые токены
-        return new JsonResponse($tokens); //перенаправляем пользователя 
+        // Запрашиваем новый access_token у eBay через refreshAccessToken($refreshToken)
+        $tokens = $ebayAuthService->refreshAccessToken($refreshToken);
+
+        // Обновляем сохранённые токены
+        $tokenService->updateTokens($refreshToken, $tokens); 
+        
+        //перенаправляем пользователя 
+        return new JsonResponse($tokens); 
 
     }
 

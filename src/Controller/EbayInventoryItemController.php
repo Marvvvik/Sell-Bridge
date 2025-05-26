@@ -20,7 +20,10 @@ class EbayInventoryItemController extends AbstractController
         $this->logger = $logger; 
     }
 
-    #[Route('/ebay/inventory/add', name: 'add_ebay_inventory_item', methods: ['POST'])]// Маршрут для добавления товара в инвентарь eBay через POST запрос
+    /**
+     * Маршрут для добавления товара в инвентарь eBay через POST запрос
+     */
+    #[Route('/ebay/inventory/add', name: 'add_ebay_inventory_item', methods: ['POST'])]
     public function addItem(Request $request): Response
     {
         $error = $this->ebayInventoryService->addItemFromRequest($request);
@@ -33,19 +36,29 @@ class EbayInventoryItemController extends AbstractController
         return new Response('Item successfully added to eBay inventory', Response::HTTP_CREATED); 
     }
 
-    #[Route('/ebay/inventory', name: 'get_ebay_inventory_items', methods: ['GET'])]   // Маршрут для получения всех товаров из инвентаря eBay через GET запрос
+    /**
+     * Маршрут для получения всех товаров из инвентаря eBay через GET запрос
+     */
+    #[Route('/ebay/inventory', name: 'get_ebay_inventory_items', methods: ['GET'])]
     public function getItems(): Response
     {
-        $items = $this->ebayInventoryService->getItems(); // Получаем список товаров из инвентаря через сервис
-        return $this->json($items); // Возвращаем список товаров в формате JSON
+        // Получаем список товаров из инвентаря через сервис
+        $items = $this->ebayInventoryService->getItems(); 
+        
+        // Возвращаем список товаров в формате JSON
+        return $this->json($items);
     }
 
-    #[Route('/ebay/inventory/{sku}', name: 'get_ebay_inventory_item_by_sku', methods: ['GET'])] // Маршрут для получения информации о товаре по его SKU через GET запрос
+    /**
+     * Маршрут для получения информации о товаре по его SKU через GET запрос
+     */
+    #[Route('/ebay/inventory/{sku}', name: 'get_ebay_inventory_item_by_sku', methods: ['GET'])]
     public function getItem(string $sku): Response
     {
         $item = $this->ebayInventoryService->getItem($sku); 
 
-        if (!$item) { // Если товар не найден, возвращаем ошибку 404
+        // Если товар не найден, возвращаем ошибку 404
+        if (!$item) {
             $this->logger->warning('Item not found with the given SKU', ['sku' => $sku]);
         }
 
@@ -53,7 +66,10 @@ class EbayInventoryItemController extends AbstractController
         return $this->json($item); 
     }
 
-    #[Route('/ebay/inventory/delete/{sku}', name: 'delete_ebay_inventory_item', methods: ['DELETE'])] // Маршрут для удаления товара из инвентаря eBay по SKU через DELETE запрос
+    /**
+     * Маршрут для удаления товара из инвентаря eBay по SKU через DELETE запрос
+     */
+    #[Route('/ebay/inventory/delete/{sku}', name: 'delete_ebay_inventory_item', methods: ['DELETE'])]
     public function deleteItem(string $sku): Response
     {
         $this->ebayInventoryService->deleteItem($sku); 

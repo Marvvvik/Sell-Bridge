@@ -12,13 +12,22 @@ class EbayInventoryService
     private $inventoryItemRepository;
     private $logger;
 
-    public function __construct(InventoryItemRepository $inventoryItemRepository, LoggerInterface $logger)
+    public function __construct(
+        InventoryItemRepository $inventoryItemRepository,
+        LoggerInterface $logger
+    )
     {
         $this->inventoryItemRepository = $inventoryItemRepository;
         $this->logger = $logger;  
     }
 
-    public function addItemFromRequest(Request $request): ?string // метод для получения данных
+    /**
+     * метод для получения данных
+     * 
+     * @param Request $request Объект HTTP-запроса с данными товара в формате JSON.
+     * @return string|null Null в случае успешного добавления, сообщение об ошибке в противном случае.
+     */
+    public function addItemFromRequest(Request $request): ?string 
     {
         $data = json_decode($request->getContent(), true);
     
@@ -41,6 +50,7 @@ class EbayInventoryService
                 $value = $value[$key];
             }
         }
+        
         // Теперь добавляем товар, если все поля присутствуют
         return $this->addItem(
             $data['sku'], 
@@ -64,9 +74,34 @@ class EbayInventoryService
         );
     }
 
-    // метод для записи данных в базу данных
-    public function addItem(string $sku, string $locale, string $title, string $size, string $color, string $material, ?string $description, ?string $brand, array $imageUrls, string 
-    $condition, float $price, string $currency, int $quantity, int $availability_quantity, \DateTimeImmutable $createdAt, string $marketplaceId, string $format, string $mpn): ?string
+    /**
+     * метод для записи данных в базу данных
+     *
+     * @param string $sku Артикул товара.
+     * @param string $locale Локаль товара.
+     * @param string $title Название товара.
+     * @param string $size Размер товара.
+     * @param string $color Цвет товара.
+     * @param string $material Материал товара.
+     * @param string|null $description Описание товара (может быть null).
+     * @param string|null $brand Бренд товара (может быть null).
+     * @param array $imageUrls Массив URL-адресов изображений товара.
+     * @param string $condition Состояние товара.
+     * @param float $price Цена товара.
+     * @param string $currency Валюта цены.
+     * @param int $quantity Доступное количество товара.
+     * @param int $availability_quantity Количество для отображения доступности.
+     * @param \DateTimeImmutable $createdAt Дата создания записи.
+     * @param string $marketplaceId Идентификатор маркетплейса.
+     * @param string $format Формат товара.
+     * @param string $mpn MPN товара.
+     * @return string|null Null в случае успеха, сообщение об ошибке в противном случае.
+     */
+    public function addItem(
+    string $sku, string $locale, string $title, string $size, string $color, string $material,
+    ?string $description, ?string $brand, array $imageUrls, string  $condition, float $price,
+    string $currency, int $quantity, int $availability_quantity, \DateTimeImmutable $createdAt,
+    string $marketplaceId, string $format, string $mpn): ?string
     {
         try {
             $item = new InventoryItem();
@@ -98,18 +133,38 @@ class EbayInventoryService
         }
     }
 
-    public function getItems(): array  // Метод для получения всех товаров из инвентаря
+    /**
+     * Метод для получения всех товаров из инвентаря
+     *
+     * @return array Массив всех товаров InventoryItem.
+     */
+    public function getItems(): array  
     {
-        return $this->inventoryItemRepository->getAllItems(); // Запрашиваем все товары из базы данных через репозиторий
+        // Запрашиваем все товары из базы данных через репозиторий
+        return $this->inventoryItemRepository->getAllItems();
     }
 
-    public function getItem(string $sku): ?InventoryItem // Метод для получения товара по SKU
+    /**
+     * Метод для получения товара по SKU
+     *
+     * @param string $sku SKU товара для поиска.
+     * @return InventoryItem|null Найденный товар или null, если товар не найден.
+     */
+    public function getItem(string $sku): ?InventoryItem
     {
-        return $this->inventoryItemRepository->findBySku($sku); // Находим товар в базе данных по SKU
+        // Находим товар в базе данных по SKU
+        return $this->inventoryItemRepository->findBySku($sku);
     }
 
-    public function deleteItem(string $sku): void  // Метод для удаления товара из инвентаря по SKU
+    /**
+     * Метод для удаления товара из инвентаря по SKU
+     *
+     * @param string $sku SKU товара для удаления.
+     * @return void
+     */
+    public function deleteItem(string $sku): void
     {
-        $this->inventoryItemRepository->deleteBySku($sku, true); // Удаляем товар из базы данных по SKU через репозиторий
+        // Удаляем товар из базы данных по SKU через репозиторий
+        $this->inventoryItemRepository->deleteBySku($sku, true);
     }
 }

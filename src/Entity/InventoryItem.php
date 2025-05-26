@@ -14,14 +14,14 @@ class InventoryItem
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(type: 'string', unique: true)]
-    private ?string $sku = null;
+       #[ORM\Column(type: 'string', unique: true, nullable: false)]
+    private string $sku;
 
-    #[ORM\Column(type: 'string')]
-    private ?string $locale = null;
+    #[ORM\Column(type: 'string', nullable: false)]
+    private string $locale;
 
-    #[ORM\Column(type: 'string')]
-    private ?string $title = null;
+    #[ORM\Column(type: 'string', nullable: false)]
+    private string $title;
 
     #[ORM\Column(type: 'string', nullable: true)]
     private ?string $size = null;
@@ -42,28 +42,28 @@ class InventoryItem
     private ?array $imageUrls = null;
 
     #[ORM\Column(type: 'string', nullable: true)]
-    private ?string $itemCondition  = null;
+    private ?string $itemCondition = null;
 
-    #[ORM\Column(type: 'float')]
-    private ?float $price = null;
+    #[ORM\Column(type: 'float', nullable: false)]
+    private float $price;
+
+    #[ORM\Column(type: 'string', nullable: false)]
+    private string $currency;
+
+    #[ORM\Column(type: 'integer', nullable: false)]
+    private int $quantity;
 
     #[ORM\Column(type: 'string', nullable: true)]
-    private ?string $currency = null;
-
-    #[ORM\Column(type: 'integer')]
-    private ?int $quantity = null;
-
-    #[ORM\Column(type: 'string', nullable: true)]
-    private ?string $mpn  = null;
+    private ?string $mpn = null;
 
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $availability_quantity = null;
 
-    #[ORM\Column(type: 'datetime_immutable')]
-    private ?\DateTimeImmutable $created_at = null;
+    #[ORM\Column(type: 'datetime_immutable', nullable: false)]
+    private \DateTimeImmutable $created_at;
 
     #[ORM\Column(type: 'string', nullable: true)]
-    private ?string $marketplaceId = null; 
+    private ?string $marketplaceId = null;
 
     #[ORM\Column(type: 'string', nullable: true)]
     private ?string $format = null;

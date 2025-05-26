@@ -5,7 +5,7 @@
 Данная система предназначена для работы с eBay API. В ней можно получить Access Token и Refresh Token, а также система автоматически обновляет Access Token через Refresh Token.
 Функциональность системы включает:
 
-  1. Добавление товаров в базу данных;
+  1. Добавление товаров в базу данных(В таблицу ebay_inventory_items которая которая думана для создания карточки товара);
 
   2. Просмотр и удаление товаров;
 
@@ -17,11 +17,13 @@
 
   6. Публикация offer. 
 
+  7. Можно контролировать выставленые товары( все ответы записываются в ebay_listings) 
+
 Система взаимодействует через отправку HTTP-запросов, например, с помощью Postman.
 
 Пути и их назночение: 
 
-1. /ebay/inventory/add — Добавление товара в базу данных
+1. /ebay/in ventory/add — Добавление товара в базу данных
 Метод: POST
 
 Body (пример):
@@ -87,6 +89,22 @@ Body (пример):
 12. /ebay/offer/publish/{offerId} — Публикация offer по offerId
 Метод: POST
 
+13. /ebay/listings - вывод ebayListing для контроля товаров 
+Метод: GET
+
+но так же через этот URL можно фильтровать вывот к URL добавляем
+"?" и параметр по которому хотим отфильтровать "sku=TEST1"
+
+к примеру: /ebay/listings?sku=TEST1
+
+фильтровать можно по таким параметрам как: 
+
+1. "id" - id предмета в ebay_inventory_items 
+2. "sku" - sku предмета 
+3. "offerId" - offer id которный предмет получил при создании
+4. "status" - статус в котором сейчас находится предме
+
+и по пути config/routes/ebay.yaml в этом файле собраны все маршруты
 
 Команда для тестирования: php bin/console app:ebay:create-test-listing
 
@@ -106,11 +124,13 @@ Body (пример):
 
 Установленный Docker
 
-Установленный DDEV
+Установленный DDEV PHP 
+
+Минимальная версия PHP: 8.2
 
 1. Клонируйте репозиторий:
 
-git clone https://github.com/Marvvvik/SellBridge.git
+git clone https://github.com/Marvvvik/Sell-Bridge.git
 
 2. Откройте PowerShell или CMD и выполните:
 
@@ -165,6 +185,6 @@ git clone https://github.com/Marvvvik/SellBridge.git
 
 3. Перейдите по адресу /ebay/auth, авторизуйтесь и получите токены для работы системы.
 
-4. Откройте файл src/Service/EbayOffersService.php и в методе createOfferFromDatabaseItem() при необходимости настройте параметры создания offer.
+4. Откройте файл src/Service/EbayOffersService.php и в методе buildOfferData() при необходимости настройте параметры создания offer.
 
 5. система готова к работе 

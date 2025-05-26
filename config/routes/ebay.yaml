@@ -1,0 +1,81 @@
+ebay_auth:
+    path: /ebay/auth
+    controller: App\Controller\EbayAuthController::auth 
+
+ebay_callback:
+    path: /ebay/callback
+    controller: App\Controller\EbayAuthController::callback 
+
+ebay_refresh:
+    path: /ebay/refresh
+    controller: App\Controller\EbayAuthController::refresh 
+
+add_ebay_inventory_api_item:
+    path: /ebay/inventoryItem/add/{sku}
+    controller: App\Controller\EbayInventoryApiController::addItem 
+    methods: [PUT]
+
+get_all_ebay_inventory_api_items:
+    path: /ebay/inventoryItem/items
+    controller: App\Controller\EbayInventoryApiController::getAllItems 
+    methods: [GET]
+
+get_ebay_inventory_api_by_sku:
+    path: /ebay/inventoryItem/item/{sku}
+    controller: App\Controller\EbayInventoryApiController::getItemBySku 
+    methods: [GET]
+
+delete_ebay_inventory_api_item:
+    path: /ebay/inventoryItem/delete/{sku}
+    controller: App\Controller\EbayInventoryApiController::deleteItem 
+    methods: [DELETE]
+
+add_ebay_inventory_item:
+    path: /ebay/inventory/add
+    controller: App\Controller\EbayInventoryItemController::addItem 
+    methods: [POST]
+
+get_ebay_inventory_items:
+    path: /ebay/inventory
+    controller: App\Controller\EbayInventoryItemController::getItems 
+    methods: [GET]
+
+get_ebay_inventory_item_by_sku:
+    path: /ebay/inventory/{sku}
+    controller: App\Controller\EbayInventoryItemController::getItem 
+    methods: [GET]
+
+delete_ebay_inventory_item:
+    path: /ebay/inventory/delete/{sku}
+    controller: App\Controller\EbayInventoryItemController::deleteItem 
+    methods: [DELET]
+
+ebay_listings_filter:
+    path: /ebay/listings
+    controller: App\Controller\EbayListingController::filterListings 
+    methods: [GET]
+
+add_ebay_offer_api_item:
+    path: /ebay/offer/add/{sku}
+    controller: App\Controller\EbayOfferController::addOffer 
+    methods: [POST]
+
+get_ebay_offer_sku:
+    path: /ebay/offers/item/{sku}
+    controller: App\Controller\EbayOfferController::getOffers 
+    methods: [GET]
+
+get_ebay_offer_offerId:
+    path: /ebay/offer/item/{offerId}
+    controller: App\Controller\EbayOfferController::getOfferByOfferId 
+    methods: [GET]
+
+delete_ebay_offer_offerid:
+    path: /ebay/offer/delete/{offerId}
+    controller: App\Controller\EbayOfferController::deleteOffer 
+    methods: [DELET]
+
+publish_ebay_offer:
+    path: /ebay/offer/publish/{offerId}
+    controller: App\Controller\EbayOfferController::publishOffer 
+    methods: [POST]
